@@ -11,6 +11,11 @@
         public string Urls { get; set; }
 
         /// <summary>
+        /// 基地址
+        /// </summary>
+        public string PathBase { get; set; }
+
+        /// <summary>
         /// 开启Swagger
         /// </summary>
         public bool Swagger { get; set; }

@@ -37,6 +37,35 @@ namespace NetModular.Lib.Data.SqlServer
         public override string FuncSubstring => "SUBSTRING";
 
         public override string FuncLength => "LEN";
+        public override string ConnectionStringBuild(string tableName = null)
+        {
+            if (tableName.IsNull() && Options.ConnectionString.NotNull())
+                return Options.ConnectionString;
+
+            Check.NotNull(DbOptions.Server, nameof(DbOptions.Server), "数据库服务器地址不能为空");
+            Check.NotNull(DbOptions.UserId, nameof(DbOptions.UserId), "数据库用户名不能为空");
+            Check.NotNull(DbOptions.Password, nameof(DbOptions.Password), "数据库密码不能为空");
+
+            Options.Version = DbOptions.Version;
+            var connStrBuilder = new SqlConnectionStringBuilder
+            {
+                DataSource = DbOptions.Port > 0 ? DbOptions.Server + "," + DbOptions.Port : DbOptions.Server,
+                UserID = DbOptions.UserId,
+                Password = DbOptions.Password,
+                MultipleActiveResultSets = true,
+                InitialCatalog = tableName.NotNull() ? tableName : Options.Database,
+                MaxPoolSize = DbOptions.MaxPoolSize < 1 ? 100 : DbOptions.MaxPoolSize,
+                MinPoolSize = DbOptions.MinPoolSize < 1 ? 0 : DbOptions.MinPoolSize
+            };
+
+            var connStr = connStrBuilder.ToString();
+
+            //该参数为null表示使用的是当前模块的数据库
+            if (tableName.IsNull())
+                Options.ConnectionString = connStr;
+
+            return connStr;
+        }
 
         public override string GeneratePagingSql(string select, string table, string where, string sort, int skip, int take, string groupBy = null, string having = null)
         {
@@ -62,13 +91,13 @@ namespace NetModular.Lib.Data.SqlServer
             }
             else
             {
-                #region ==2018及以下版本==
+                #region ==2012以下版本==
 
                 sqlBuilder.AppendFormat("SELECT * FROM (SELECT ROW_NUMBER() OVER(ORDER BY {0}) AS RowNum,{1} FROM {2}", sort, @select, table);
                 if (!string.IsNullOrWhiteSpace(where))
                     sqlBuilder.AppendFormat(" WHERE {0}", @where);
 
-                sqlBuilder.AppendFormat(") AS T WHERE T.RowNum BETWEEN {0} AND {1}", skip, skip + take);
+                sqlBuilder.AppendFormat(") AS T WHERE T.RowNum BETWEEN {0} AND {1}", skip + 1, skip + take);
 
                 #endregion
             }
@@ -104,16 +133,7 @@ namespace NetModular.Lib.Data.SqlServer
 
         public override void CreateDatabase(List<IEntityDescriptor> entityDescriptors, IDatabaseCreateEvents events, out bool databaseExists)
         {
-            var connStrBuilder = new SqlConnectionStringBuilder
-            {
-                DataSource = DbOptions.Port > 0 ? DbOptions.Server + "," + DbOptions.Port : DbOptions.Server,
-                UserID = DbOptions.UserId,
-                Password = DbOptions.Password,
-                MultipleActiveResultSets = true,
-                InitialCatalog = "master"
-            };
-
-            using var con = new SqlConnection(connStrBuilder.ToString());
+            using var con = new SqlConnection(ConnectionStringBuild("master"));
             con.Open();
             var cmd = con.CreateCommand();
             cmd.CommandType = System.Data.CommandType.Text;
